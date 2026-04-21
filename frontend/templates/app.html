@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loan Application Console – LoanFlow AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    .chat-scroll { scroll-behavior: smooth; }
+    .msg-user { background: #1e40af; color: white; border-radius: 18px 18px 4px 18px; }
+    .msg-assistant { background: #f8fafc; color: #1e293b; border-radius: 18px 18px 18px 4px; border: 1px solid #e2e8f0; }
+    .msg-system { background: #fef9c3; color: #713f12; border-radius: 12px; font-size: 0.85rem; }
+    .step-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .step-active { background: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.3); }
+    .step-done { background: #22c55e; }
+    .step-pending { background: #d1d5db; }
+    .json-panel pre { font-size: 0.72rem; line-height: 1.5; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(1.3);} }
+    .agent-tag { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 9999px; }
+    .typing-indicator span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; margin: 0 2px; animation: bounce 1.2s infinite; }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-6px);} }
+    .status-pill { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 10px; border-radius: 9999px; }
+    .panel-section { border-bottom: 1px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 16px; }
+    .panel-section:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    .mobile-tab-btn.active { background: #eff6ff; color: #1d4ed8; border-bottom: 2px solid #3b82f6; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+  <!-- Top Bar -->
+  <header class="bg-white shadow-sm border-b border-gray-200 z-10 sticky top-0">
+    <div class="max-w-screen-xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <a href="/" class="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors">
+          <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+          </div>
+          <span class="font-bold text-sm hidden sm:inline">LoanFlow AI</span>
+        </a>
+        <span class="text-gray-300 hidden sm:inline">|</span>
+        <span class="text-xs text-gray-400 font-mono hidden sm:inline" id="app-id-label">{{ app_id }}</span>
+      </div>
+      
+      <!-- Step Indicator (desktop) -->
+      <div class="hidden md:flex items-center space-x-1 text-xs text-gray-500" id="step-bar">
+        <div class="step-item flex items-center space-x-1" data-step="INTAKE">
+          <div class="step-dot step-active" id="dot-INTAKE"></div><span class="font-medium">Intake</span>
+        </div>
+        <div class="w-8 h-px bg-gray-200 mx-1"></div>
+        <div class="step-item flex items-center space-x-1" data-step="VALIDATE">
+          <div class="step-dot step-pending" id="dot-VALIDATE"></div><span>Validate</span>
+        </div>
+        <div class="w-8 h-px bg-gray-200 mx-1"></div>
+        <div class="step-item flex items-center space-x-1" data-step="ANALYZE">
+          <div class="step-dot step-pending" id="dot-ANALYZE"></div><span>Analyse</span>
+        </div>
+        <div class="w-8 h-px bg-gray-200 mx-1"></div>
+        <div class="step-item flex items-center space-x-1" data-step="EXTERNAL_CHECKS">
+          <div class="step-dot step-pending" id="dot-EXTERNAL_CHECKS"></div><span>Checks</span>
+        </div>
+        <div class="w-8 h-px bg-gray-200 mx-1"></div>
+        <div class="step-item flex items-center space-x-1" data-step="DECISION">
+          <div class="step-dot step-pending" id="dot-DECISION"></div><span>Decision</span>
+        </div>
+        <div class="w-8 h-px bg-gray-200 mx-1"></div>
+        <div class="step-item flex items-center space-x-1" data-step="DONE">
+          <div class="step-dot step-pending" id="dot-DONE"></div><span>Done</span>
+        </div>
+      </div>
+
+      <!-- Status pill -->
+      <div id="status-pill" class="status-pill bg-blue-100 text-blue-700">INTAKE</div>
+    </div>
+  </header>
+
+  <!-- Mobile Tabs -->
+  <div class="md:hidden bg-white border-b border-gray-200 flex" id="mobile-tabs">
+    <button class="mobile-tab-btn active flex-1 py-2 text-sm font-medium text-gray-600 transition-colors" onclick="showTab('chat')">💬 Chat</button>
+    <button class="mobile-tab-btn flex-1 py-2 text-sm font-medium text-gray-600 transition-colors" onclick="showTab('panel')">📊 Decision Panel</button>
+  </div>
+
+  <!-- Main Layout -->
+  <main class="flex-1 max-w-screen-xl mx-auto w-full flex overflow-hidden" style="height: calc(100vh - 3.5rem - 2.5rem);">
+
+    <!-- LEFT: Chat -->
+    <div id="chat-tab" class="w-full md:w-1/2 lg:w-3/5 flex flex-col bg-white border-r border-gray-200">
+      
+      <!-- Messages -->
+      <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll">
+        <div class="text-center py-8">
+          <div class="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </div>
+          <h2 class="text-lg font-semibold text-gray-800 mb-1">Welcome to LoanFlow AI</h2>
+          <p class="text-sm text-gray-500 max-w-sm mx-auto">Tell me about yourself and your loan needs. I'll guide you through the application step by step.</p>
+          <div class="mt-4 flex flex-wrap gap-2 justify-center">
+            <button onclick="sendSuggestion(this)" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full border border-blue-200 transition-colors">
+              I earn RM 8,000/month and want a RM 300,000 home loan
+            </button>
+            <button onclick="sendSuggestion(this)" class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full border border-blue-200 transition-colors">
+              My name is Ahmad, I need a personal loan of RM 50,000
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typing-indicator" class="hidden px-4 pb-2">
+        <div class="flex items-center space-x-2 text-gray-400 text-sm">
+          <div class="typing-indicator"><span></span><span></span><span></span></div>
+          <span id="typing-label">AI agents processing…</span>
+        </div>
+      </div>
+
+      <!-- Simulate failures toggle -->
+      <div class="border-t border-gray-100 px-4 py-2 flex items-center gap-4 text-xs text-gray-500 bg-gray-50">
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" id="sim-credit-fail" class="rounded border-gray-300 text-red-500 focus:ring-red-400" />
+          <span>Simulate credit check failure</span>
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" id="sim-val-fail" class="rounded border-gray-300 text-red-500 focus:ring-red-400" />
+          <span>Simulate valuation failure</span>
+        </label>
+      </div>
+
+      <!-- Input -->
+      <div class="border-t border-gray-200 p-3 bg-white">
+        <form id="msg-form" class="flex items-end gap-2">
+          <textarea
+            id="msg-input"
+            rows="2"
+            placeholder="Type your message… (Press Enter to send)"
+            class="flex-1 resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-shadow"
+          ></textarea>
+          <button
+            type="submit"
+            id="send-btn"
+            class="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-xl transition-colors flex-shrink-0 disabled:opacity-50"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- RIGHT: Decision Panel -->
+    <div id="panel-tab" class="hidden md:flex flex-col w-full md:w-1/2 lg:w-2/5 overflow-y-auto bg-gray-50 p-4 space-y-4">
+
+      <!-- Application Fields -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Application Fields
+        </h3>
+        <div id="fields-grid" class="grid grid-cols-2 gap-2">
+          <!-- Populated by JS -->
+          <div class="col-span-2 text-xs text-gray-400 italic">Waiting for information…</div>
+        </div>
+      </div>
+
+      <!-- Financial Metrics -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Financial Metrics
+        </h3>
+        <div id="metrics-grid" class="space-y-2">
+          <div class="text-xs text-gray-400 italic">Analysis pending…</div>
+        </div>
+      </div>
+
+      <!-- External Checks -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          External Checks
+        </h3>
+        <div id="checks-grid" class="space-y-2">
+          <div class="text-xs text-gray-400 italic">Checks not yet run…</div>
+        </div>
+      </div>
+
+      <!-- Agent Timeline -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Agent Timeline
+        </h3>
+        <div id="agent-timeline" class="space-y-3">
+          <div class="text-xs text-gray-400 italic">No agent activity yet…</div>
+        </div>
+      </div>
+
+      <!-- Final Decision JSON -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          Structured Decision JSON
+          <button onclick="copyJson()" class="ml-auto text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded transition-colors">Copy</button>
+        </h3>
+        <div class="json-panel bg-gray-900 rounded-lg p-3 overflow-x-auto">
+          <pre id="decision-json" class="text-green-400 mono">{
+  "loan_status": "—",
+  "risk_level": "—",
+  "dsr": "—",
+  "missing_information": [],
+  "next_action": "Provide required information"
+}</pre>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const APP_ID = "{{ app_id }}";
+    const STEPS = ['INTAKE', 'VALIDATE', 'ANALYZE', 'EXTERNAL_CHECKS', 'DECISION', 'DONE'];
+
+    // Mobile tab switching
+    function showTab(tab) {
+      const chatTab = document.getElementById('chat-tab');
+      const panelTab = document.getElementById('panel-tab');
+      document.querySelectorAll('.mobile-tab-btn').forEach(b => b.classList.remove('active'));
+      if (tab === 'chat') {
+        chatTab.classList.remove('hidden');
+        chatTab.classList.add('flex');
+        panelTab.classList.add('hidden');
+        document.querySelectorAll('.mobile-tab-btn')[0].classList.add('active');
+      } else {
+        panelTab.classList.remove('hidden');
+        panelTab.classList.add('flex');
+        panelTab.classList.add('flex-col');
+        chatTab.classList.add('hidden');
+        chatTab.classList.remove('flex');
+        document.querySelectorAll('.mobile-tab-btn')[1].classList.add('active');
+      }
+    }
+
+    function updateStepBar(currentStep) {
+      const stepIdx = STEPS.indexOf(currentStep);
+      STEPS.forEach((s, i) => {
+        const dot = document.getElementById(`dot-${s}`);
+        if (!dot) return;
+        dot.className = 'step-dot ';
+        if (i < stepIdx) dot.className += 'step-done';
+        else if (i === stepIdx) dot.className += 'step-active';
+        else dot.className += 'step-pending';
+      });
+      const pill = document.getElementById('status-pill');
+      pill.textContent = currentStep;
+      const colors = {
+        INTAKE: 'bg-blue-100 text-blue-700',
+        VALIDATE: 'bg-yellow-100 text-yellow-700',
+        ANALYZE: 'bg-purple-100 text-purple-700',
+        EXTERNAL_CHECKS: 'bg-green-100 text-green-700',
+        DECISION: 'bg-orange-100 text-orange-700',
+        DONE: 'bg-gray-100 text-gray-700',
+      };
+      pill.className = `status-pill ${colors[currentStep] || 'bg-gray-100 text-gray-700'}`;
+    }
+
+    function renderField(label, value) {
+      if (value === null || value === undefined) return '';
+      return `
+        <div class="bg-gray-50 rounded-lg p-2">
+          <div class="text-xs text-gray-400 mb-0.5">${label}</div>
+          <div class="text-xs font-semibold text-gray-800 truncate">${value}</div>
+        </div>`;
+    }
+
+    function updateFields(fields) {
+      const grid = document.getElementById('fields-grid');
+      const f = fields;
+      const html = [
+        renderField('Applicant Name', f.applicant_name),
+        renderField('Monthly Income', f.monthly_income ? `RM ${f.monthly_income.toLocaleString()}` : null),
+        renderField('Monthly Debts', f.monthly_debts !== null && f.monthly_debts !== undefined ? `RM ${f.monthly_debts.toLocaleString()}` : null),
+        renderField('Employment', f.employment_status),
+        renderField('Loan Type', f.loan_type),
+        renderField('Loan Amount', f.loan_amount ? `RM ${f.loan_amount.toLocaleString()}` : null),
+        renderField('Loan Term', f.loan_term_months ? `${f.loan_term_months} months` : null),
+        renderField('Property Value', f.property_value ? `RM ${f.property_value.toLocaleString()}` : null),
+      ].filter(Boolean).join('');
+      grid.innerHTML = html || '<div class="col-span-2 text-xs text-gray-400 italic">Waiting for information…</div>';
+    }
+
+    function riskColor(risk) {
+      return { low: 'text-green-600 bg-green-50', medium: 'text-yellow-600 bg-yellow-50', high: 'text-red-600 bg-red-50', unknown: 'text-gray-400 bg-gray-50' }[risk] || 'text-gray-400 bg-gray-50';
+    }
+
+    function updateMetrics(analysis) {
+      const grid = document.getElementById('metrics-grid');
+      if (!analysis.dsr) {
+        grid.innerHTML = '<div class="text-xs text-gray-400 italic">Analysis pending…</div>';
+        return;
+      }
+      const dsrPct = analysis.dsr;
+      const dsrColor = dsrPct < 40 ? 'bg-green-500' : dsrPct < 60 ? 'bg-yellow-500' : 'bg-red-500';
+      grid.innerHTML = `
+        <div class="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+          <span class="text-xs text-gray-500">DSR</span>
+          <div class="flex items-center gap-2">
+            <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-full ${dsrColor} rounded-full" style="width:${Math.min(dsrPct,100)}%"></div>
+            </div>
+            <span class="text-xs font-bold text-gray-800">${dsrPct.toFixed(1)}%</span>
+          </div>
+        </div>
+        ${analysis.estimated_monthly_installment ? `
+        <div class="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+          <span class="text-xs text-gray-500">Monthly Instalment</span>
+          <span class="text-xs font-bold text-gray-800">RM ${analysis.estimated_monthly_installment.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        </div>` : ''}
+        <div class="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+          <span class="text-xs text-gray-500">Risk Level</span>
+          <span class="text-xs font-bold px-2 py-0.5 rounded ${riskColor(analysis.risk_level)}">${(analysis.risk_level||'—').toUpperCase()}</span>
+        </div>`;
+    }
+
+    function updateChecks(tool) {
+      const grid = document.getElementById('checks-grid');
+      if (!tool.credit_score && !tool.credit_check_failed && !tool.property_valuation && !tool.valuation_check_failed) {
+        grid.innerHTML = '<div class="text-xs text-gray-400 italic">Checks not yet run…</div>';
+        return;
+      }
+      let html = '';
+      if (tool.credit_check_failed) {
+        html += `<div class="flex items-center gap-2 bg-red-50 rounded-lg p-2">
+          <span class="text-red-500">⚠</span>
+          <div><div class="text-xs font-semibold text-red-700">Credit Check</div><div class="text-xs text-red-500">Service unavailable</div></div>
+        </div>`;
+      } else if (tool.credit_score) {
+        const band = tool.credit_band || '';
+        const col = tool.credit_score >= 700 ? 'green' : tool.credit_score >= 650 ? 'yellow' : 'red';
+        html += `<div class="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+          <div><div class="text-xs font-semibold text-gray-700">Credit Score</div><div class="text-xs text-gray-500">${band}</div></div>
+          <span class="text-xs font-bold text-${col}-600">${tool.credit_score}</span>
+        </div>`;
+      }
+      if (tool.valuation_check_failed) {
+        html += `<div class="flex items-center gap-2 bg-red-50 rounded-lg p-2">
+          <span class="text-red-500">⚠</span>
+          <div><div class="text-xs font-semibold text-red-700">Property Valuation</div><div class="text-xs text-red-500">Service unavailable</div></div>
+        </div>`;
+      } else if (tool.property_valuation) {
+        html += `<div class="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+          <div class="text-xs font-semibold text-gray-700">Property Valuation</div>
+          <span class="text-xs font-bold text-gray-800">RM ${tool.property_valuation.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        </div>`;
+      }
+      grid.innerHTML = html || '<div class="text-xs text-gray-400 italic">Checks not yet run…</div>';
+    }
+
+    const AGENT_COLORS = {
+      'Intake Agent': 'bg-blue-100 text-blue-700',
+      'Intake Agent (re-prompt)': 'bg-blue-100 text-blue-700',
+      'Underwriter Agent': 'bg-purple-100 text-purple-700',
+      'Verification Agent': 'bg-green-100 text-green-700',
+      'Comms Agent': 'bg-orange-100 text-orange-700',
+    };
+
+    function updateTimeline(events) {
+      const tl = document.getElementById('agent-timeline');
+      if (!events || events.length === 0) {
+        tl.innerHTML = '<div class="text-xs text-gray-400 italic">No agent activity yet…</div>';
+        return;
+      }
+      tl.innerHTML = events.map(e => {
+        const color = AGENT_COLORS[e.agent_role] || 'bg-gray-100 text-gray-600';
+        const time = new Date(e.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        return `
+          <div class="flex gap-3 items-start">
+            <div class="flex flex-col items-center mt-1">
+              <div class="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"></div>
+              <div class="w-px flex-1 bg-gray-200 mt-1"></div>
+            </div>
+            <div class="flex-1 pb-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="agent-tag ${color}">${e.agent_role}</span>
+                <span class="text-xs text-gray-400">${time}</span>
+              </div>
+              <p class="text-xs text-gray-600 leading-relaxed">${e.output_summary || e.input_summary}</p>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function updateDecisionJson(decision) {
+      const el = document.getElementById('decision-json');
+      if (!decision) return;
+      const out = {
+        loan_status: decision.loan_status || '—',
+        risk_level: decision.risk_level || '—',
+        dsr: decision.dsr || '—',
+        missing_information: decision.missing_information || [],
+        next_action: decision.next_action || '—',
+      };
+      el.textContent = JSON.stringify(out, null, 2);
+      // Color based on status
+      const colors = { approved: 'text-green-400', rejected: 'text-red-400', manual_review: 'text-yellow-400', incomplete: 'text-blue-400', pending: 'text-blue-400' };
+      el.className = `mono ${colors[decision.loan_status] || 'text-green-400'}`;
+    }
+
+    function renderAppState(app) {
+      updateStepBar(app.current_step);
+      updateFields(app.extracted_fields);
+      updateMetrics(app.analysis);
+      updateChecks(app.tool_results);
+      updateTimeline(app.agent_events);
+      updateDecisionJson(app.decision);
+    }
+
+    function appendMessage(role, content, ts) {
+      const msgs = document.getElementById('messages');
+      const div = document.createElement('div');
+      div.className = 'flex ' + (role === 'user' ? 'justify-end' : 'justify-start');
+      const time = ts ? new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+      let inner = '';
+      if (role === 'user') {
+        inner = `<div class="max-w-xs sm:max-w-sm lg:max-w-md">
+          <div class="msg-user px-4 py-2.5 text-sm leading-relaxed">${escapeHtml(content)}</div>
+          <div class="text-xs text-gray-400 mt-1 text-right">${time}</div>
+        </div>`;
+      } else if (role === 'assistant') {
+        inner = `<div class="max-w-xs sm:max-w-sm lg:max-w-md">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <span class="text-white text-xs font-bold">AI</span>
+            </div>
+            <span class="text-xs text-gray-400">${time}</span>
+          </div>
+          <div class="msg-assistant px-4 py-2.5 text-sm leading-relaxed prose prose-sm max-w-none">${marked.parse(content)}</div>
+        </div>`;
+      }
+      div.innerHTML = inner;
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showTyping(show, label) {
+      const el = document.getElementById('typing-indicator');
+      if (show) {
+        el.classList.remove('hidden');
+        if (label) document.getElementById('typing-label').textContent = label;
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+
+    function sendSuggestion(btn) {
+      const input = document.getElementById('msg-input');
+      input.value = btn.textContent.trim();
+      document.getElementById('msg-form').dispatchEvent(new Event('submit'));
+    }
+
+    function copyJson() {
+      const text = document.getElementById('decision-json').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 1500);
+      });
+    }
+
+    // Load existing state on page load
+    async function loadApp() {
+      const resp = await fetch(`/api/applications/${APP_ID}`);
+      if (!resp.ok) return;
+      const app = await resp.json();
+      renderAppState(app);
+      // Render existing messages
+      const msgs = document.getElementById('messages');
+      if (app.messages && app.messages.length > 0) {
+        msgs.innerHTML = '';
+        app.messages.forEach(m => appendMessage(m.role, m.content, m.created_at));
+      }
+    }
+
+    // Send message
+    document.getElementById('msg-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('msg-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const sendBtn = document.getElementById('send-btn');
+      sendBtn.disabled = true;
+      input.disabled = true;
+
+      appendMessage('user', text, new Date().toISOString());
+      input.value = '';
+
+      showTyping(true, 'AI agents processing…');
+
+      const creditFail = document.getElementById('sim-credit-fail').checked;
+      const valFail = document.getElementById('sim-val-fail').checked;
+      const url = `/api/applications/${APP_ID}/messages?simulate_credit_failure=${creditFail}&simulate_valuation_failure=${valFail}`;
+
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: text }),
+        });
+        const data = await resp.json();
+        showTyping(false);
+        appendMessage('assistant', data.assistant_message.content, data.assistant_message.created_at);
+        renderAppState(data.application);
+        // Switch to panel tab on mobile after first response
+        if (window.innerWidth < 768 && data.application.agent_events && data.application.agent_events.length > 0) {
+          // keep in chat mode
+        }
+      } catch (err) {
+        showTyping(false);
+        appendMessage('assistant', '⚠️ Error contacting the AI backend. Please ensure the server is running.', new Date().toISOString());
+      }
+
+      sendBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    });
+
+    // Enter key sends, Shift+Enter newline
+    document.getElementById('msg-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('msg-form').dispatchEvent(new Event('submit'));
+      }
+    });
+
+    loadApp();
+  </script>
+</body>
+</html>
