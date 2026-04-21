@@ -56,10 +56,14 @@ def _parse_number(s: str) -> float:
     return float(s.replace(",", ""))
 
 
+_MAX_INPUT_LEN = 2000  # guard against ReDoS on very long inputs
+
+
 def _extract_fields(text: str, current: Dict[str, Any]) -> Dict[str, Any]:
     """Extract structured fields from free-text using heuristics."""
     fields = dict(current)
-    lower = text.lower()
+    # Truncate to prevent polynomial ReDoS on adversarial inputs
+    lower = text[:_MAX_INPUT_LEN].lower()
 
     # Employment status
     if fields.get("employment_status") is None:
@@ -77,11 +81,11 @@ def _extract_fields(text: str, current: Dict[str, Any]) -> Dict[str, Any]:
 
     # Loan term: convert years to months if needed
     if fields.get("loan_term_months") is None:
-        m = re.search(r"(\d+)\s*year[s]?\s*(?:loan|term|repayment|tenure)?", lower)
+        m = re.search(r"(\d{1,3})\s+year[s]?\b", lower)
         if m:
             fields["loan_term_months"] = int(m.group(1)) * 12
         else:
-            m = re.search(r"(\d+)\s*months?\s*(?:loan|term|repayment|tenure)?", lower)
+            m = re.search(r"(\d{1,4})\s+months?\b", lower)
             if m:
                 fields["loan_term_months"] = int(m.group(1))
 
