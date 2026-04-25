@@ -1,0 +1,19 @@
+LOAN AGREEMENT (PRIVATE)
+
+PARTIES:
+- LENDER: FastCash Solutions Ltd.
+- BORROWER: John Doe (Monthly Income: RM 6,500.00, Employment: Permanent Staff at TechCorp)
+
+LOAN TERMS:
+1. PRINCIPAL: RM 15,000.00
+2. PURPOSE: Personal Use
+3. INTEREST RATE: 24% per annum, calculated with mandatory daily compounding.
+4. REPAYMENT: 12 equal monthly installments.
+5. EXISTING DEBTS: Borrower declares NO existing monthly debt commitments.
+
+SPECIAL CLAUSES (RED FLAGS):
+- SECTION 8 (LATE FEES): Any payment missed by more than 24 hours will incur a flat fee of RM 500.00, which will double every subsequent 24 hours.
+- SECTION 12 (EARLY SETTLEMENT): Pre-payment penalty of 80% of remaining interest.
+- SECTION 15 (COLLATERAL): Lender may seize all electronic devices upon a single missed payment.
+
+The Borrower signs this agreement acknowledging all terms.
